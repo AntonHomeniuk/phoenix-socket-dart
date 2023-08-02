@@ -14,6 +14,7 @@ import 'exceptions.dart';
 import 'message.dart';
 import 'push.dart';
 import 'socket_options.dart';
+import 'package:web_socket_channel/io.dart';
 
 part '_stream_router.dart';
 
@@ -47,13 +48,16 @@ class PhoenixSocket {
   /// endpoint is the full url to which you wish to connect
   /// e.g. `ws://localhost:4000/websocket/socket`
   PhoenixSocket(
-    /// The URL of the Phoenix server.
-    String endpoint, {
 
-    /// The options used when initiating and maintaining the
-    /// websocket connection.
-    PhoenixSocketOptions? socketOptions,
-  })  : _endpoint = endpoint,
+      /// The URL of the Phoenix server.
+      String endpoint, {
+
+        /// The options used when initiating and maintaining the
+        /// websocket connection.
+        PhoenixSocketOptions? socketOptions,
+        this.headers,
+      })
+      : _endpoint = endpoint,
         _socketState = SocketState.unknown {
     _options = socketOptions ?? PhoenixSocketOptions();
 
@@ -82,9 +86,9 @@ class PhoenixSocket {
   final Map<String, Stream<Message>> _topicStreams = {};
 
   final BehaviorSubject<PhoenixSocketEvent> _stateStreamController =
-      BehaviorSubject();
+  BehaviorSubject();
   final StreamController<String> _receiveStreamController =
-      StreamController.broadcast();
+  StreamController.broadcast();
   final String _endpoint;
   final StreamController<Message> _topicMessages = StreamController();
 
@@ -97,7 +101,7 @@ class PhoenixSocket {
 
   SocketState _socketState;
 
-  WebSocketChannel? _ws;
+  IOWebSocketChannel? _ws;
 
   _StreamRouter<Message>? _router;
 
@@ -139,6 +143,7 @@ class PhoenixSocket {
   Map<String, PhoenixChannel> channels = {};
 
   late PhoenixSocketOptions _options;
+  final Map<String, dynamic>? headers;
 
   /// Default duration for a connection timeout.
   Duration get defaultTimeout => _options.timeout;
@@ -153,8 +158,9 @@ class PhoenixSocket {
   /// The [PhoenixChannel] for this topic may not be open yet, it'll still
   /// eventually yield messages when the channel is open and it receives
   /// messages.
-  Stream<Message> streamForTopic(String topic) => _topicStreams.putIfAbsent(
-      topic, () => _streamRouter.route((event) => event.topic == topic));
+  Stream<Message> streamForTopic(String topic) =>
+      _topicStreams.putIfAbsent(
+          topic, () => _streamRouter.route((event) => event.topic == topic));
 
   /// The string URL of the remote Phoenix server.
   String get endpoint => _endpoint;
@@ -189,7 +195,7 @@ class PhoenixSocket {
     final completer = Completer<PhoenixSocket?>();
 
     try {
-      _ws = WebSocketChannel.connect(_mountPoint);
+      _ws = IOWebSocketChannel.connect(_mountPoint, headers: headers);
       _ws!.stream
           .where(_shouldPipeMessage)
           .listen(_onSocketData, cancelOnError: true)
@@ -344,7 +350,7 @@ class PhoenixSocket {
     PhoenixChannel? channel;
     if (channels.isNotEmpty) {
       final foundChannels =
-          channels.entries.where((element) => element.value.topic == topic);
+      channels.entries.where((element) => element.value.topic == topic);
       channel = foundChannels.isNotEmpty ? foundChannels.first.value : null;
     }
 
@@ -390,8 +396,8 @@ class PhoenixSocket {
     }
   }
 
-  static Future<Uri> _buildMountPoint(
-      String endpoint, PhoenixSocketOptions options) async {
+  static Future<Uri> _buildMountPoint(String endpoint,
+      PhoenixSocketOptions options) async {
     var decodedUri = Uri.parse(endpoint);
     final params = await options.getParams();
     final queryParams = decodedUri.queryParameters.entries.toList()
@@ -405,7 +411,7 @@ class PhoenixSocket {
     _reconnectAttempts = 0;
     _heartbeatTimeout ??= Timer.periodic(
       _options.heartbeat,
-      (_) => _sendHeartbeat(),
+          (_) => _sendHeartbeat(),
     );
   }
 
@@ -454,11 +460,11 @@ class PhoenixSocket {
 
   void _triggerChannelExceptions(PhoenixException exception) {
     _logger.fine(
-      () => 'Trigger channel exceptions on ${channels.length} channels',
+          () => 'Trigger channel exceptions on ${channels.length} channels',
     );
     for (final channel in channels.values) {
       _logger.finer(
-        () => 'Trigger channel exceptions on ${channel.topic}',
+            () => 'Trigger channel exceptions on ${channel.topic}',
       );
       channel.triggerError(exception);
     }
@@ -546,7 +552,7 @@ class PhoenixSocket {
       return;
     } else {
       _logger.info(
-        () => 'Socket closed with reason ${ev.reason} and code ${ev.code}',
+            () => 'Socket closed with reason ${ev.reason} and code ${ev.code}',
       );
       _triggerChannelExceptions(exc);
     }
